@@ -1,0 +1,82 @@
+Name:  Caleb Priester
+Class: CPSC3220 Sect. 2
+Asg:   Project 3
+Date:  2 April 2015
+
+KNOWN PROBLEMS:
+   The only real known problem with my allocator is it's speed.  There is a 
+good amount of overhead on every page that has to be processed, which results
+in an allocator that is not as fast as the system malloc.  Other than that,
+my allocator does all that it is supposed to.
+
+DESIGN:
+
+   PAGE HEADER (36 BYTES):
+   0-3:    Number of segments available to be allocated.        (int)
+   4-7:    Maximum number of segments that can be allocated.    (int)
+   8-11:   Size of each element on the page.                    (int)
+   12-19:  Pointer to the next page in the list.                (void*)
+   20-27:  Pointer to the previous page in the list.            (void*)
+   28-35:  Pointer to the head of that page's free list.        (void*)
+
+   SEGMENT HEADER (8 BYTES):
+   0-7:    If the segment is unallocated, this points to the    (void*)
+           next element in the free list.  If it is allocated, 
+	   this points to the front of the page header.
+
+   Malloc:
+      Malloc first determines which segmented free list that the designated
+      size corresponds to and calls an interior method with the specified list.
+      If the space to be allocated is greater than 1024 bytes, however, malloc
+      simply calls mmap with the specified size and applies the same page 
+      header as normal.  This mapped section does not need to be added to a
+      segregated free list, as that space is only used for the large object.
+
+      The interior malloc then traverses through the list of pages (using the 
+      pointer to next page in each page header) until it finds a page with an
+      open segment or gets to the end of the list.  If it gets to the end of
+      the list, a new page is mapped and prepended to the head of the list.
+      This new page is given all correct values for its page header, and then
+      is traversed to add the segments that will be available for mapping. 
+      Since all of the segments begin unallocated, their segment headers 
+      indicate the very next segment in the list.
+
+      After this has been done, the interior malloc is guaranteed to be at a
+      page with a segment available for allocating.  The segment pointed to by
+      the head of the free list in the page header is what gets allocated, and 
+      the head of the free list is updated to point to the next free segment
+      in the list.  The segment's header is set to point to the beginning of
+      the page and a pointer to the body of the segment is returned.  The 
+      number of available segments is decremented by 1.
+
+   Calloc:
+      Calloc simply calls malloc of size "number of elements" * "size of each
+      element," sets the bits of the allocated space to 0 using memset, and
+      returns the allocated space.
+
+   Realloc:
+      Realloc determines the current size of the element pointed to by pointer
+      using the size element in the page header.  It then calls malloc with
+      the specified size, and uses memset to copy as many bytes as possible
+      from the old space to the new space.  If the new space is smaller than 
+      the old space, this will only copy the first n amount of bytes that will
+      fit in the new space.  It then frees the old space and returns a pointer
+      to the new space.
+
+      If the pointer is NULL, then malloc is simply called with the specified
+      space.  If the size is zero, then free is called on the specified 
+      pointer.
+
+   Free:
+      Free takes advantage of the fact that the allocated segment headers point
+      to the head of the page that the segment is on.  Free prepends the newly
+      freed segment to the head of the free list and the number of available 
+      segments is incremented.  If the number of available segments is equal
+      to the maximum number of segments, this indicates that the page is empty
+      and can be unmapped.  The page is removed from the list of pages, and if
+      that page was at the head of the list, the list pointer is set to the 
+      next page in the list.  Having both a pointer to the previous page and
+      the next page makes the removal from the list simple, as all it involves
+      is setting the previous page's next page to the current page's next page
+      and the next page's previous page to the previous page of the current
+      page.
